@@ -64,13 +64,15 @@ void Loki::NoFollowerAttackCollision::InstallArrowHook() {
 }
 #endif
 
+// This hook is used as a fallback if the magic hook somehow failed.
+// It prevents hostile effects from applying but not the pain so the target might retaliate despite taking no harm.
 void Loki::NoFollowerAttackCollision::InstallVaildTargetHook()
 {
 	REL::Relocation<uintptr_t> vtbl{ REL::ID( RE::VTABLE_Character[0] ) };
-	funcCheckValidTargetOriginal = vtbl.write_vfunc( 0xD6, &Loki::NoFollowerAttackCollision::FollowerCheck );
+	funcCheckValidTargetOriginal = vtbl.write_vfunc( 0xD6, &Loki::NoFollowerAttackCollision::IsTargetVaild );
 
 	REL::Relocation<uintptr_t> vtblPC{ REL::ID( RE::VTABLE_PlayerCharacter[0] ) };
-	funcPCCheckValidTargetOriginal = vtblPC.write_vfunc( 0xD6, &Loki::NoFollowerAttackCollision::FollowerCheck );
+	funcPCCheckValidTargetOriginal = vtblPC.write_vfunc( 0xD6, &Loki::NoFollowerAttackCollision::IsTargetVaild );
 }
 
 void Loki::NoFollowerAttackCollision::InstallInputSink() {
@@ -82,7 +84,7 @@ void Loki::NoFollowerAttackCollision::MeleeFunction(RE::Character* a_aggressor, 
 
 	if (!a_victim || !a_aggressor || !toggle) { return _MeleeFunction(a_aggressor, a_victim, a3, a4, a5); }
 
-	if( !FollowerCheck( a_aggressor, *a_victim ) ) return;
+	if( !IsTargetVaild( a_aggressor, *a_victim ) ) return;
 
 	return _MeleeFunction(a_aggressor, a_victim, a3, a4, a5);
 
@@ -92,7 +94,7 @@ void Loki::NoFollowerAttackCollision::SweepFunction(RE::Character* a_aggressor, 
 
 	if (!a_victim || !a_aggressor || !toggle) { return _SweepFunction(a_aggressor, a_victim, a3, a4, a5); }
 
-	if( !FollowerCheck( a_aggressor, *a_victim ) ) return;
+	if( !IsTargetVaild( a_aggressor, *a_victim ) ) return;
 
 	return _SweepFunction(a_aggressor, a_victim, a3, a4, a5);
 
@@ -102,19 +104,19 @@ void Loki::NoFollowerAttackCollision::ArrowFunction(RE::Character* a_aggressor, 
 
 	if (!a_victim || !a_aggressor || !toggle) { return _ArrowFunction(a_aggressor, a_victim, a3, a4, a5); }
 
-	if( !FollowerCheck( a_aggressor, *a_victim ) ) return;
+	if( !IsTargetVaild( a_aggressor, *a_victim ) ) return;
 
 	return _ArrowFunction(a_aggressor, a_victim, a3, a4, a5);
 
 }
 
-bool Loki::NoFollowerAttackCollision::FollowerCheck( RE::Actor* a_this, RE::TESObjectREFR& a_target )
+bool Loki::NoFollowerAttackCollision::IsTargetVaild( RE::Actor* a_this, RE::TESObjectREFR& a_target )
 {
 	bool isValid = true;
 	if( a_target.Is( RE::FormType::ActorCharacter ) && toggle )
 	{
 		auto target = static_cast<RE::Actor*>( &a_target );
-		if( !target->IsHostileToActor( a_this ) )
+		if( !target->IsDead() && !target->IsHostileToActor( a_this ) )
 		{
 			auto targetOwnerHandle		= target->GetCommandingActor();
 			auto thisOwnerHandle		= a_this->GetCommandingActor();
@@ -141,16 +143,17 @@ bool Loki::NoFollowerAttackCollision::FollowerCheck( RE::Actor* a_this, RE::TESO
 		}
 	}
 
+	//return isValid;
 	// 41241
 	if( a_this->IsPlayerRef() )
 	{
-		using func_t = decltype(&FollowerCheck);
+		using func_t = decltype(&IsTargetVaild);
 		REL::Relocation<func_t> func( funcPCCheckValidTargetOriginal );
 		return isValid && func( a_this, a_target );
 	}
 	else
 	{
-		using func_t = decltype(&FollowerCheck);
+		using func_t = decltype(&IsTargetVaild);
 		REL::Relocation<func_t> func( funcCheckValidTargetOriginal );
 		return isValid && func( a_this, a_target );
 	}
